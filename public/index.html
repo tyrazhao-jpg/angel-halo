@@ -218,6 +218,18 @@
   </div>
 </div>
 
+<!-- 重置确认弹窗 -->
+<div class="modal-overlay" id="resetModal">
+  <div class="modal-box">
+    <div class="modal-title">🔄 重置所有数据</div>
+    <div class="modal-desc">确定要清空所有点亮记录和排名吗？<br>此操作不可撤销！</div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeResetModal()">取消</button>
+      <button class="modal-btn confirm" onclick="confirmReset()">确定重置</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══════════ 全局变量 ══════════
 var socket = null;
@@ -226,18 +238,18 @@ var selectedPerson = null;
 var selectedHalos = [];
 var state = { scores: {}, log: [], speakerIdx: 0, roundHaloCount: {} };
 
-// ══════════ 配置数据 ══════════
+// ══════════ 配置数据（与 server.js 保持一致）══════════
 var SPEAKERS = [
-  { seq: 1, king: 'Amy', angel: 'Luna', type: 'relief', typeLabel: '减负成果' },
-  { seq: 2, king: 'Amy', angel: '谢总', type: 'treasure', typeLabel: '寻宝成果' },
-  { seq: 3, king: '王芬', angel: 'Tyra', type: 'reuse', typeLabel: '复用成果' },
-  { seq: 4, king: 'Ann', angel: 'Tyra', type: 'discovery', typeLabel: '宝藏成果' },
-  { seq: 5, king: 'Luna', angel: 'Ann', type: 'relief', typeLabel: '减负成果' },
-  { seq: 6, king: 'Rena', angel: 'Alice', type: 'relief', typeLabel: '减负成果' },
-  { seq: 7, king: 'Rena', angel: 'Bella', type: 'treasure', typeLabel: '寻宝成果' },
-  { seq: 8, king: 'Bella', angel: 'Tyra', type: 'relief', typeLabel: '减负成果' },
-  { seq: 9, king: '业务部', angel: 'Amy', type: 'relief', typeLabel: '减负成果' },
-  { seq: 10, king: 'Alice', angel: 'Vian', type: 'relief', typeLabel: '减负成果' },
+  { seq: 1,  king: 'Amy',     angel: 'Luna',     type: 'relief',    typeLabel: '减负成果' },
+  { seq: 2,  king: 'Amy',     angel: '谢总',     type: 'relief',    typeLabel: '减负成果' },
+  { seq: 3,  king: '王芬',    angel: 'Tyra',     type: 'treasure',  typeLabel: '寻宝成果' },
+  { seq: 4,  king: 'Ann',     angel: 'Tracy',    type: 'relief',    typeLabel: '减负成果' },
+  { seq: 5,  king: 'Luna',    angel: 'Ann',      type: 'relief',    typeLabel: '减负成果' },
+  { seq: 6,  king: 'Rena',    angel: 'Alice',    type: 'relief',    typeLabel: '减负成果' },
+  { seq: 7,  king: 'Rena',    angel: 'Bella',    type: 'treasure',  typeLabel: '寻宝成果' },
+  { seq: 8,  king: 'Bella',   angel: 'Tyra',     type: 'relief',    typeLabel: '减负成果' },
+  { seq: 9,  king: '业务部',  angel: 'Amy',      type: 'relief',    typeLabel: '减负成果' },
+  { seq: 10, king: 'Alice',   angel: 'Vian',     type: 'relief',    typeLabel: '减负成果' },
 ];
 
 var HALO_INFO = {
@@ -286,9 +298,7 @@ function join() {
   myName = name;
   document.getElementById('nameOverlay').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
-  // 立即渲染界面（不依赖socket）
   doRenderAll();
-  // 连接socket
   initSocket();
 }
 
@@ -319,34 +329,29 @@ function initSocket() {
       clearSelection();
     });
 
-  
-  socket.on('halo_reset', function() {
-    loadState();
-    renderPersonGrid();
-    renderLog();
-    renderRank();
-    updateSpeaker();
-  });
-  socket.on('halo_awarded', function(data) {
+    socket.on('halo_reset', function() {
+      state = { scores: {}, log: [], speakerIdx: 0, roundHaloCount: {} };
+      doRenderAll();
+    });
+
+    socket.on('halo_awarded', function(data) {
       console.log('✨ 光环点亮', data);
-      // 更新本地状态
       if (data && data.name && data.haloType) {
         if (!state.scores[data.name]) state.scores[data.name] = {};
         if (!state.scores[data.name][data.haloType]) state.scores[data.name][data.haloType] = 0;
         state.scores[data.name][data.haloType]++;
       }
       showToast((data ? data.awarder : '') + ' → ' + (data ? data.name : '') + ' ' + (data && data.haloInfo ? data.haloInfo.icon : ''));
-      // 渲染动态和排名
       renderFeed();
       renderRank();
-      // 播放动画（不是自己点的）
       if (data && data.awarder !== myName) {
         playCelebrateAnimation(data);
       }
     });
 
     socket.on('online_count', function(count) {
-      document.getElementById('onlineCount').textContent = count || 0;
+      var el = document.getElementById('onlineCount');
+      if (el) el.textContent = count || 0;
     });
 
     socket.on('disconnect', function() {
@@ -355,6 +360,7 @@ function initSocket() {
 
   } catch(e) {
     console.error('Socket初始化失败:', e);
+    showToast('❌ 网络连接失败，请刷新页面重试');
   }
 }
 
@@ -553,25 +559,20 @@ function giveHalo() {
   var displayRole = selectedPerson.displayRole;
   var halosToSend = selectedHalos.slice();
 
-  // 播放自己的动画
   playSelfCelebrate(name, displayRole, halosToSend);
 
-  // 发送
   for (var i = 0; i < halosToSend.length; i++) {
     if (socket) socket.emit('award_halo', { name: name, haloType: halosToSend[i], displayRole: displayRole });
   }
 
-  // 手动更新本地状态（不等服务器广播）
   for (var j = 0; j < halosToSend.length; j++) {
     if (!state.scores[name]) state.scores[name] = {};
     if (!state.scores[name][halosToSend[j]]) state.scores[name][halosToSend[j]] = 0;
     state.scores[name][halosToSend[j]]++;
   }
 
-  // 立即刷新排名和动态
   renderRank();
   renderFeed();
-
   clearSelection();
 }
 
@@ -580,38 +581,33 @@ function clearSelection() {
   selectedHalos = [];
   var allBtns = document.querySelectorAll('.person-btn');
   for (var i = 0; i < allBtns.length; i++) allBtns[i].classList.remove('selected');
-  document.getElementById('haloSection').style.display = 'none';
-  document.getElementById('giveSection').style.display = 'none';
+  var haloSec = document.getElementById('haloSection');
+  if (haloSec) haloSec.style.display = 'none';
+  var giveSec = document.getElementById('giveSection');
+  if (giveSec) giveSec.style.display = 'none';
   updateHint();
 }
 
 // ══════════ Tab 切换 ══════════
 function switchTab(tab) {
   console.log('🔀 切换Tab:', tab);
-
-  // 隐藏所有tab内容
   var allContents = document.querySelectorAll('.tab-content');
   for (var i = 0; i < allContents.length; i++) allContents[i].classList.remove('active');
-
-  // 取消所有tab按钮高亮
   var allBtns = document.querySelectorAll('.tabs button');
   for (var j = 0; j < allBtns.length; j++) allBtns[j].classList.remove('active');
 
-  // 显示目标tab
   var target = document.getElementById('tab-' + tab);
   if (target) target.classList.add('active');
 
-  // 高亮对应的按钮（通过文字匹配，不依赖event）
   var btnTexts = { 'award': '点亮光环', 'feed': '实时动态', 'rank': '🏆 排名' };
   var tabs = document.querySelectorAll('.tabs button');
   for (var k = 0; k < tabs.length; k++) {
-    if (tabs[k].textContent.indexOf(btnTexts[tab]) !== -1 || tabs[k].textContent === btnTexts[tab]) {
+    if (tabs[k].textContent.indexOf(btnTexts[tab]) !== -1) {
       tabs[k].classList.add('active');
       break;
     }
   }
 
-  // 渲染对应内容
   if (tab === 'feed') renderFeed();
   if (tab === 'rank') renderRank();
 }
@@ -619,12 +615,11 @@ function switchTab(tab) {
 // ══════════ 实时动态 ══════════
 function renderFeed() {
   var list = document.getElementById('feedList');
-  if (!list) { console.warn('feedList not found'); return; }
+  if (!list) return;
   if (!state.log || state.log.length === 0) {
     list.innerHTML = '<p class="empty-tip">等待光环点亮中...✨</p>';
     return;
   }
-  console.log('📝 渲染动态，共', state.log.length, '条');
   list.innerHTML = '';
   var show = state.log.slice(0, 50);
   for (var i = 0; i < show.length; i++) {
@@ -643,7 +638,7 @@ function renderFeed() {
 // ══════════ 排名 ══════════
 function renderRank() {
   var list = document.getElementById('rankList');
-  if (!list) { console.warn('rankList not found'); return; }
+  if (!list) return;
 
   var data = [];
   var names = state.scores ? Object.keys(state.scores) : [];
@@ -662,7 +657,6 @@ function renderRank() {
     return;
   }
 
-  console.log('🏆 渲染排名，共', data.length, '人');
   list.innerHTML = '';
   for (var k = 0; k < data.length; k++) {
     var d = data[k];
@@ -839,20 +833,6 @@ function stopParticles() {
 }
 
 // ════════ 重置功能 ════════
-(function() {
-  
-  if (headerH1) {
-    headerH1.style.cursor = 'pointer';
-    headerH1.title = '长按2秒可重置数据';
-    headerH1. });
-    headerH1.addEventListener('touchend', function() { clearTimeout(pressTimer); });
-    headerH1.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
-    headerH1.addEventListener('mousedown', function() { pressTimer = setTimeout(doShowReset, 2000); });
-    headerH1.addEventListener('mouseup', function() { clearTimeout(pressTimer); });
-    headerH1.addEventListener('mouseleave', function() { clearTimeout(pressTimer); });
-  }
-})();
-
 function doShowReset() {
   var m = document.getElementById('resetModal');
   if (m) m.classList.add('show');
@@ -867,7 +847,6 @@ function confirmReset() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       showToast('✅ 已重置所有数据！');
-      // 重置本地状态
       state = { scores: {}, log: [], speakerIdx: 0, roundHaloCount: {} };
       doRenderAll();
     })
@@ -875,14 +854,11 @@ function confirmReset() {
 }
 
 // 点击遮罩层关闭弹窗
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('click', function(e) {
   var overlay = document.getElementById('resetModal');
-  if (overlay) {
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) closeResetModal();
-    });
-  }
+  if (overlay && e.target === overlay) closeResetModal();
 });
+
 // ══════════ Toast ══════════
 function showToast(msg) {
   var t = document.createElement('div');
@@ -897,18 +873,5 @@ function showToast(msg) {
 }
 </script>
 
-  <!-- 重置确认弹窗 -->
-  <div class="modal-overlay" id="resetModal">
-    <div class="modal-box">
-      <div class="modal-title">🔄 重置所有数据</div>
-      <div class="modal-desc">确定要清空所有点亮记录和排名吗？<br>此操作不可撤销！</div>
-      <div class="modal-btns">
-        <button class="modal-btn cancel" onclick="closeResetModal()">取消</button>
-        <button class="modal-btn confirm" onclick="confirmReset()">确定重置</button>
-      </div>
-    </div>
-  </div>
-  <div id="resetToast" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.85);color:#fff;padding:14px 28px;border-radius:12px;font-size:15px;z-index:9999;pointer-events:none;">✅ 已重置</div>
 </body>
-
 </html>
