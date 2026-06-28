@@ -9,11 +9,12 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 // ═══════════ 配置 ═══════════
+// 发言顺序以原始文件为准：天使光环行动_1.0成果大放送_2.0发布_精简版_新一周_最终状态.html
 const SPEAKERS = [
   { seq: 1,  king: 'Amy',     angel: 'Luna',     type: 'relief',    typeLabel: '减负成果' },
-  { seq: 2,  king: 'Amy',     angel: '谢总',     type: 'treasure',  typeLabel: '寻宝成果' },
-  { seq: 3,  king: '王芬',    angel: 'Tyra',     type: 'reuse',     typeLabel: '复用成果' },
-  { seq: 4,  king: 'Ann',     angel: 'Tyra',     type: 'discovery', typeLabel: '宝藏成果' },
+  { seq: 2,  king: 'Amy',     angel: '谢总',     type: 'relief',    typeLabel: '减负成果' },
+  { seq: 3,  king: '王芬',    angel: 'Tyra',     type: 'treasure',  typeLabel: '寻宝成果' },
+  { seq: 4,  king: 'Ann',     angel: 'Tracy',    type: 'relief',    typeLabel: '减负成果' },
   { seq: 5,  king: 'Luna',    angel: 'Ann',      type: 'relief',    typeLabel: '减负成果' },
   { seq: 6,  king: 'Rena',    angel: 'Alice',    type: 'relief',    typeLabel: '减负成果' },
   { seq: 7,  king: 'Rena',    angel: 'Bella',    type: 'treasure',  typeLabel: '寻宝成果' },

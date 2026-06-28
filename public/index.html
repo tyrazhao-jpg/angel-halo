@@ -165,8 +165,13 @@
 <!-- 主界面 -->
 <div id="mainApp" style="display:none;">
   <div class="header">
-    <h1>✨ 天使光环点亮</h1>
-    <div class="online">🟢 <span id="onlineCount">1</span> 人在线</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <h1 style="margin:0;font-size:22px;">✨ 天使光环点亮</h1>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="online" style="font-size:13px;">🟢 <span id="onlineCount">1</span> 人在线</div>
+        <button onclick="doShowReset()" title="重置所有数据" style="background:none;border:1px solid rgba(255,255,255,0.25);color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;padding:4px 8px;border-radius:8px;line-height:1;">⚙️</button>
+      </div>
+    </div>
     <div class="tabs">
       <button class="active" onclick="switchTab('award')">点亮光环</button>
       <button onclick="switchTab('feed')">实时动态</button>
@@ -835,12 +840,11 @@ function stopParticles() {
 
 // ════════ 重置功能 ════════
 (function() {
-  var pressTimer = null;
-  var headerH1 = document.querySelector('.header h1');
+  
   if (headerH1) {
     headerH1.style.cursor = 'pointer';
     headerH1.title = '长按2秒可重置数据';
-    headerH1.addEventListener('touchstart', function() { pressTimer = setTimeout(doShowReset, 2000); });
+    headerH1. });
     headerH1.addEventListener('touchend', function() { clearTimeout(pressTimer); });
     headerH1.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
     headerH1.addEventListener('mousedown', function() { pressTimer = setTimeout(doShowReset, 2000); });
