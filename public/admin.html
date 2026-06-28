@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>天使光环 - 大屏</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+* { box-sizing: border-box; margin:0; padding:0; }
+body { font-family: -apple-system, 'PingFang SC', sans-serif; background: #0f172a; color: #fff; min-height: 100vh; }
+
+.layout { display: grid; grid-template-columns: 1fr 380px; gap: 0; min-height: 100vh; }
+
+/* 左侧：排名 */
+.left { padding: 32px 40px; }
+.left h1 { font-size: 32px; font-weight: 900; margin-bottom: 8px; background: linear-gradient(135deg, #f59e0b, #ef4444, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.left .subtitle { font-size: 15px; color: #94a3b8; margin-bottom: 28px; }
+
+.rank-list { list-style: none; }
+.rank-item { display: flex; align-items: center; background: rgba(255,255,255,.06); border-radius: 16px; padding: 16px 24px; margin-bottom: 12px; transition: all .3s; }
+.rank-item.new-award { background: rgba(245,158,11,.18); transform: scale(1.02); }
+.rank-item .no { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; margin-right: 20px; flex-shrink: 0; }
+.rank-item:nth-child(1) .no { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #b45309; font-size: 24px; }
+.rank-item:nth-child(2) .no { background: #334155; color: #cbd5e1; }
+.rank-item:nth-child(3) .no { background: linear-gradient(135deg, #fed7aa, #fdba74); color: #9a3412; }
+.rank-item .info { flex: 1; }
+.rank-item .name { font-size: 22px; font-weight: 800; }
+.rank-item .halo-detail { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+.rank-item .score { font-size: 36px; font-weight: 900; color: #f59e0b; }
+.rank-item .score-label { font-size: 13px; color: #64748b; }
+
+/* 右侧：实时动态 + 发言进度 */
+.right { background: rgba(255,255,255,.04); border-left: 1px solid rgba(255,255,255,.08); padding: 32px 24px; display: flex; flex-direction: column; }
+
+.speaker-card { background: linear-gradient(135deg, #1e3a5f, #312e81); border-radius: 16px; padding: 20px; margin-bottom: 24px; }
+.speaker-card .label { font-size: 13px; color: #94a3b8; margin-bottom: 8px; }
+.speaker-card .names { font-size: 24px; font-weight: 800; }
+.speaker-card .king { color: #f87171; }
+.speaker-card .angel { color: #4ade80; }
+.speaker-card .type-label { font-size: 14px; color: #94a3b8; margin-top: 8px; }
+
+.speaker-progress { display: flex; gap: 6px; margin-top: 14px; }
+.speaker-progress .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.2); transition: all .3s; }
+.speaker-progress .dot.active { background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,.6); transform: scale(1.3); }
+.speaker-progress .dot.done { background: rgba(74,222,128,.5); }
+
+.feed-title { font-size: 15px; font-weight: 700; color: #94a3b8; margin-bottom: 12px; }
+.feed-list { flex: 1; overflow: hidden; }
+.feed-item { padding: 10px 14px; background: rgba(255,255,255,.06); border-radius: 10px; margin-bottom: 8px; font-size: 14px; animation: slideIn .3s; }
+.feed-item .time { color: #64748b; font-size: 12px; }
+.feed-item .awarder { color: #60a5fa; }
+.feed-item .target { color: #fbbf24; font-weight: 700; }
+.feed-item .halo-text { font-size: 18px; }
+
+.online-badge { display: inline-block; background: rgba(34,197,94,.2); color: #22c55e; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; margin-top: 16px; }
+
+.conn-status { position: fixed; top: 12px; right: 12px; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; z-index: 200; }
+.conn-status.ok { background: rgba(34,197,94,.25); color: #4ade80; border: 1px solid rgba(74,222,128,.3); }
+.conn-status.off { background: rgba(239,68,68,.2); color: #f87171; border: 1px solid rgba(248,113,113,.3); }
+
+.next-btn {
+  position: fixed; bottom: 32px; right: 32px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff; border: none; border-radius: 50px;
+  padding: 16px 32px; font-size: 18px; font-weight: 800;
+  cursor: pointer; box-shadow: 0 8px 32px rgba(245,158,11,.4);
+  transition: all .2s; z-index: 100; display: flex; align-items: center; gap: 8px;
+}
+.next-btn:hover { transform: translateY(-2px); }
+.next-btn:disabled { background: #334155; box-shadow: none; cursor: not-allowed; }
+
+@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="conn-status off" id="connStatus">⚠ 未连接</div>
+
+<div class="layout">
+  <div class="left">
+    <h1>✨ 天使光环排行榜</h1>
+    <div class="subtitle" id="subtitle">等待数据加载...</div>
+    <ul class="rank-list" id="rankList"></ul>
+  </div>
+  <div class="right">
+    <div class="speaker-card">
+      <div class="label">当前发言</div>
+      <div class="names" id="speakerNames">—</div>
+      <div class="type-label" id="speakerType">—</div>
+      <div class="speaker-progress" id="speakerProgress"></div>
+    </div>
+    <div class="feed-title">⚡ 实时动态</div>
+    <div class="feed-list" id="feedList">
+      <p style="color:#64748b;text-align:center;padding:40px 0;">等待光环点亮...</p>
+    </div>
+    <div class="online-badge" id="onlineBadge">🟢 0 人在线</div>
+  </div>
+</div>
+
+<button class="next-btn" id="nextBtn" onclick="nextSpeaker()">
+  <span>▶</span> 下一个发言
+</button>
+
+<script>
+// ── 配置（与服务端保持一致）
+var SPEAKERS = [
+  { seq: 1,  king: 'Amy',      angel: 'Luna',     typeLabel: '减负成果' },
+  { seq: 2,  king: 'Amy',      angel: '谢总',     typeLabel: '寻宝成果' },
+  { seq: 3,  king: '王芬',    angel: 'Tyra',     typeLabel: '复用成果' },
+  { seq: 4,  king: 'Ann',      angel: 'Tyra',     typeLabel: '宝藏成果' },
+  { seq: 5,  king: 'Luna',     angel: 'Ann',      typeLabel: '减负成果' },
+  { seq: 6,  king: 'Rena',     angel: 'Alice',    typeLabel: '减负成果' },
+  { seq: 7,  king: 'Rena',     angel: 'Bella',    typeLabel: '寻宝成果' },
+  { seq: 8,  king: 'Bella',    angel: 'Tyra',     typeLabel: '减负成果' },
+  { seq: 9,  king: '业务部',   angel: 'Amy',      typeLabel: '减负成果' },
+  { seq: 10, king: 'Alice',    angel: 'Vian',     typeLabel: '减负成果' },
+];
+
+var HALO_INFO = {
+  relief:    { icon: '🌿', label: '减负光环' },
+  treasure:  { icon: '🔍', label: '寻宝光环' },
+  reuse:     { icon: '♻️', label: '复用光环' },
+  discovery: { icon: '💎', label: '宝藏光环' },
+  adviser:   { icon: '🧠', label: '智囊光环' },
+};
+
+// ── 状态
+var state = { scores: {}, log: [], speakerIdx: 0 };
+var currentSpeakerIdx = 0;
+
+// ── Socket
+var socket = io();
+
+// 连接成功
+socket.on('connect', function() {
+  console.log('✅ [大屏] Socket 已连接！socket.id =', socket.id);
+  var el = document.getElementById('connStatus');
+  el.className = 'conn-status ok';
+  el.textContent = '✅ 已连接';
+  socket.emit('join', '大屏');
+});
+
+// 断开连接
+socket.on('disconnect', function(reason) {
+  console.log('❌ [大屏] Socket 断开：', reason);
+  var el = document.getElementById('connStatus');
+  el.className = 'conn-status off';
+  el.textContent = '⚠ 未连接';
+});
+
+// 收到最新状态（每次有更新都会推送）
+socket.on('state_update', function(newState) {
+  console.log('📥 [大屏] 收到 state_update，log条数 =', (newState.log || []).length);
+  state = newState;
+  currentSpeakerIdx = state.speakerIdx || 0;
+  renderAll();
+});
+
+// 收到点亮事件（触发高亮动画）
+socket.on('halo_awarded', function(data) {
+  console.log('🎉 [大屏] 收到 halo_awarded：', data.awarder, '→', data.name, data.haloInfo ? data.haloInfo.icon : '');
+  renderRank(data.name);
+  renderFeed();
+  highlightName(data.name);
+});
+
+// 发言切换
+socket.on('speaker_changed', function(data) {
+  console.log('🔄 [大屏] 发言切换 → 第', data.speakerIdx + 1, '轮');
+  currentSpeakerIdx = data.speakerIdx;
+  renderSpeaker(data.speaker);
+  renderProgress();
+  updateNextBtn();
+});
+
+// 在线人数
+socket.on('online_count', function(count) {
+  var el = document.getElementById('onlineBadge');
+  if (el) el.textContent = '🟢 ' + count + ' 人在线';
+});
+
+// ── 渲染全部
+function renderAll() {
+  renderRank();
+  renderFeed();
+  renderSpeaker(SPEAKERS[currentSpeakerIdx]);
+  renderProgress();
+  updateNextBtn();
+  var subtitle = document.getElementById('subtitle');
+  if (subtitle) {
+    subtitle.textContent = '总计 ' + (state.log || []).length + ' 个光环已点亮　·　第 ' + (currentSpeakerIdx + 1) + '/' + SPEAKERS.length + ' 轮';
+  }
+}
+
+// ── 渲染排名
+function getTotalScore(name) {
+  var s = state.scores && state.scores[name];
+  if (!s) return 0;
+  return Object.keys(s).reduce(function(sum, k) { return sum + (s[k] || 0); }, 0);
+}
+
+function renderRank(highlightName) {
+  var list = document.getElementById('rankList');
+  if (!list) return;
+  var data = [];
+  var names = state.scores ? Object.keys(state.scores) : [];
+  for (var i = 0; i < names.length; i++) {
+    var total = getTotalScore(names[i]);
+    if (total > 0) data.push({ name: names[i], total: total });
+  }
+  data.sort(function(a, b) { return b.total - a.total; });
+
+  list.innerHTML = '';
+  if (data.length === 0) {
+    list.innerHTML = '<li style="text-align:center;color:#64748b;padding:60px 0;">暂无数据，等待光环点亮...</li>';
+    return;
+  }
+  for (var i = 0; i < data.length; i++) {
+    var d = data[i];
+    var medals = ['🥇', '🥈', '🥉'];
+    var li = document.createElement('li');
+    li.className = 'rank-item' + (d.name === highlightName ? ' new-award' : '');
+    li.setAttribute('data-name', d.name);
+    li.innerHTML =
+      '<div class="no">' + (medals[i] || (i + 1)) + '</div>' +
+      '<div class="info"><div class="name">' + d.name + '</div>' +
+      '<div class="halo-detail">' + getHaloDetail(d.name) + '</div></div>' +
+      '<div><div class="score">' + d.total + '</div><div class="score-label">光环</div></div>';
+    list.appendChild(li);
+  }
+}
+
+function getHaloDetail(name) {
+  var s = state.scores && state.scores[name];
+  if (!s) return '—';
+  var parts = [];
+  var keys = Object.keys(HALO_INFO);
+  for (var i = 0; i < keys.length; i++) {
+    if (s[keys[i]]) parts.push(HALO_INFO[keys[i]].icon + '×' + s[keys[i]]);
+  }
+  return parts.join('  ') || '—';
+}
+
+function highlightName(name) {
+  var el = document.querySelector('[data-name="' + name + '"]');
+  if (el) {
+    el.classList.add('new-award');
+    setTimeout(function() { el.classList.remove('new-award'); }, 2000);
+  }
+}
+
+// ── 渲染发言进度
+function renderSpeaker(sp) {
+  sp = sp || SPEAKERS[currentSpeakerIdx];
+  if (!sp) return;
+  var namesEl = document.getElementById('speakerNames');
+  var typeEl = document.getElementById('speakerType');
+  if (namesEl) namesEl.innerHTML = '👑 <span class="king">' + sp.king + '</span>　×　🤝 <span class="angel">' + sp.angel + '</span>';
+  if (typeEl) typeEl.textContent = '#' + sp.seq + ' ' + sp.typeLabel;
+}
+
+function renderProgress() {
+  var el = document.getElementById('speakerProgress');
+  if (!el) return;
+  var html = '';
+  for (var i = 0; i < SPEAKERS.length; i++) {
+    var cls = i === currentSpeakerIdx ? 'active' : (i < currentSpeakerIdx ? 'done' : '');
+    html += '<div class="dot ' + cls + '" title="第' + (i+1) + '轮"></div>';
+  }
+  el.innerHTML = html;
+}
+
+// ── 渲染动态
+function renderFeed() {
+  var list = document.getElementById('feedList');
+  if (!list) return;
+  var log = state.log || [];
+  if (log.length === 0) {
+    list.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px 0;">等待光环点亮...</p>';
+    return;
+  }
+  list.innerHTML = '';
+  var show = log.slice(0, 30);
+  for (var i = 0; i < show.length; i++) {
+    var item = show[i];
+    var div = document.createElement('div');
+    div.className = 'feed-item';
+    var info = HALO_INFO[item.halo] || {};
+    div.innerHTML =
+      '<span class="time">' + (item.time || '') + '</span>　' +
+      '<span class="awarder">' + (item.awarder || '') + '</span> 为 ' +
+      '<span class="target">' + (item.name || '') + '</span> 点亮了 ' +
+      '<span class="halo-text">' + (info.icon || '') + ' ' + (info.label || '') + '</span>';
+    list.appendChild(div);
+  }
+}
+
+// ── 下一个发言
+function nextSpeaker() {
+  var btn = document.getElementById('nextBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> 切换中...';
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/next-speaker', true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onload = function() {
+    console.log('✅ [大屏] 下一个发言 API 成功');
+    setTimeout(function() { updateNextBtn(); }, 800);
+  };
+  xhr.onerror = function() {
+    console.log('❌ [大屏] 下一个发言 API 失败');
+    btn.disabled = false;
+    updateNextBtn();
+    alert('切换失败，请重试');
+  };
+  xhr.send('{}');
+}
+
+function updateNextBtn() {
+  var btn = document.getElementById('nextBtn');
+  if (!btn) return;
+  if (currentSpeakerIdx >= SPEAKERS.length - 1) {
+    btn.disabled = true;
+    btn.innerHTML = '🏁 已全部完成';
+  } else {
+    btn.disabled = false;
+    var next = SPEAKERS[currentSpeakerIdx + 1];
+    btn.innerHTML = '<span>▶</span> 下一个：' + next.king + ' × ' + next.angel;
+  }
+}
+
+console.log('📺 [大屏] 页面加载完成，等待 Socket 连接...');
+console.log('💡 提示：按 F12 打开控制台，可以看到实时通信日志');
+
+// 检查是否通过 http 打开（直接双击文件会导致 socket 无法连接）
+if (location.protocol === 'file:') {
+  document.body.innerHTML = '<div style="padding:60px 40px;color:#f87171;font-size:18px;line-height:2;">' +
+    '⚠️ 请通过服务器打开此页面！<br><br>' +
+    '正确方式：在浏览器地址栏输入<br>' +
+    '<code style="background:rgba(255,255,255,.1);padding:6px 12px;border-radius:8px;display:inline-block;margin-top:8px;">http://localhost:3000/admin.html</code><br><br>' +
+    '不要直接双击 HTML 文件！' +
+    '</div>';
+}
+
+// ── 轮询备份：每 3 秒拉一次数据（防止 socket 事件丢失）
+setInterval(function() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/state', true);
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      var d = JSON.parse(xhr.responseText);
+      var newState = d.state;
+      // 简单对比 log 长度，如果不一致就更新
+      if ((newState.log || []).length !== (state.log || []).length) {
+        console.log('🔄 [大屏] 轮询发现新数据，刷新显示');
+        state = newState;
+        currentSpeakerIdx = state.speakerIdx || 0;
+        renderAll();
+      }
+    }
+  };
+  xhr.send();
+}, 3000);
+</script>
+</body>
+</html>

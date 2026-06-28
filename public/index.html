@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>天使光环点亮</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root {
+    --primary: #5267d8;
+    --primary-light: #e8ecff;
+    --success: #22c55e;
+    --warn: #f59e0b;
+    --danger: #e84040;
+    --bg: #f4f6fb;
+    --card: #fff;
+    --text: #23272f;
+    --muted: #94a3b8;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* 进入名字遮罩 */
+  #nameOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+  #nameOverlay .box { background: #fff; border-radius: 24px; padding: 40px 32px; width: 320px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: popIn .4s cubic-bezier(.17,.67,.29,1.3); }
+  @keyframes popIn { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #nameOverlay h2 { font-size: 24px; margin-bottom: 6px; background: linear-gradient(135deg,#5267d8,#7c5cfc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  #nameOverlay p { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+  #nameOverlay input { width: 100%; padding: 14px 18px; border: 2px solid #e2e8f0; border-radius: 14px; font-size: 17px; outline: none; margin-bottom: 20px; transition: border-color .2s; text-align: center; letter-spacing: 2px; }
+  #nameOverlay input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(82,103,216,.12); }
+  #nameOverlay button { width: 100%; padding: 14px; border: none; border-radius: 14px; background: linear-gradient(135deg,#5267d8,#7c5cfc); color: #fff; font-size: 17px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 16px rgba(82,103,216,.35); transition: transform .15s,box-shadow .15s; }
+  #nameOverlay button:hover { transform: translateY(-1px); }
+  #nameOverlay button:active { transform: scale(.97); }
+
+  /* 头部 */
+  .header { background: linear-gradient(135deg, #5267d8 0%, #7c5cfc 100%); color: #fff; padding: 14px 16px 10px; position: sticky; top: 0; z-index: 50; }
+  .header h1 { font-size: 16px; font-weight: 800; }
+  .header .online { font-size: 12px; opacity: .8; margin-top: 2px; }
+  .tabs { display: flex; gap: 6px; margin-top: 10px; }
+  .tabs button { flex: 1; padding: 8px 0; border: none; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.2); color: #fff; transition: all .2s; }
+  .tabs button.active { background: #fff; color: var(--primary); }
+
+  /* 发言进度 */
+  .speaker-bar { background: var(--card); margin: 12px; border-radius: var(--radius); padding: 14px 18px; box-shadow: 0 2px 12px rgba(0,0,0,.06); position: relative; overflow: hidden; }
+  .speaker-bar::before { content:''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: linear-gradient(180deg,#5267d8,#7c5cfc); border-radius: var(--radius) 0 0 var(--radius); }
+  .speaker-bar .seq { font-size: 13px; font-weight: 800; color: var(--primary); }
+  .speaker-bar .roles { margin-top: 8px; font-size: 15px; line-height: 1.5; }
+  .speaker-bar .king { color: #e84040; font-weight: 800; }
+  .speaker-bar .angel { color: #22c55e; font-weight: 800; }
+  .speaker-bar .type-label { font-size: 12px; color: var(--muted); margin-top: 6px; font-weight: 600; }
+  .next-btn { margin-top: 12px; width: 100%; padding: 11px; border: 2px dashed var(--primary); border-radius: 10px; background: var(--primary-light); color: var(--primary); font-weight: 700; font-size: 14px; cursor: pointer; }
+  .progress-dots { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+  .progress-dot { width: 8px; height: 8px; border-radius: 50%; background: #e2e8f0; transition: .3s; }
+  .progress-dot.active { background: var(--primary); transform: scale(1.25); }
+  .progress-dot.done { background: #22c55e; }
+
+  /* 人员网格 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px; padding: 12px; }
+  .person-btn { position: relative; background: var(--card); border: 2.5px solid #e2e8f0; border-radius: 16px; padding: 14px 6px 12px; text-align: center; font-size: 14px; font-weight: 700; cursor: pointer; transition: all .2s; box-shadow: 0 2px 8px rgba(0,0,0,.04); -webkit-tap-highlight-color: transparent; }
+  .person-btn.selected { border-color: var(--primary); background: var(--primary-light); transform: scale(1.04); box-shadow: 0 4px 16px rgba(82,103,216,.2); }
+  .person-btn.speaking { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.2); }
+  .person-btn.disabled { opacity: .32; pointer-events: none; filter: grayscale(.7); }
+  .person-btn .role-tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; margin-bottom: 5px; letter-spacing: .5px; }
+  .person-btn .count-badge { position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; border-radius: 999px; background: linear-gradient(135deg,#f59e0b,#fbbf24); color: #fff; font-size: 11px; font-weight: 900; display: flex; align-items: center; justify-content: center; padding: 0 5px; box-shadow: 0 2px 8px rgba(245,158,11,.45); border: 2px solid #fff; z-index: 2; }
+  .person-btn .person-avatar { width: 42px; height: 42px; border-radius: 50%; margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: linear-gradient(135deg,#e8ecff,#f1f5f9); }
+
+  /* 光环选择 */
+  .halo-section { padding: 0 12px 12px; }
+  .halo-section h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+  .halo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 9px; }
+  .halo-btn { padding: 13px 8px; border: 2.5px solid #e2e8f0; border-radius: 16px; background: var(--card); text-align: center; cursor: pointer; transition: all .2s; -webkit-tap-highlight-color: transparent; }
+  .halo-btn.selected { border-color: var(--primary); background: var(--primary-light); transform: scale(1.04); }
+  .halo-btn.disabled { opacity: .32; pointer-events: none; filter: grayscale(.6); }
+  .halo-btn .halo-icon { font-size: 28px; display: block; margin-bottom: 4px; }
+  .halo-btn .halo-label { font-size: 12px; font-weight: 800; }
+  .halo-btn .halo-desc { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+  /* 点亮按钮 */
+  .give-section { padding: 0 12px 28px; }
+  .give-btn { width: 100%; padding: 16px; border: none; border-radius: 16px; background: linear-gradient(135deg, #5267d8, #7c5cfc); color: #fff; font-size: 18px; font-weight: 900; cursor: pointer; box-shadow: 0 6px 24px rgba(82,103,216,.38); letter-spacing: 2px; position: relative; overflow: hidden; }
+  .give-btn::after { content:''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg,transparent,rgba(255,255,255,.12),transparent); animation: shine 2s infinite; }
+  @keyframes shine { from{transform:translateX(-100%)} to{transform:translateX(100%)} }
+  .give-btn:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
+  .give-btn:disabled::after { display: none; }
+  .hint { text-align: center; font-size: 13px; color: var(--muted); margin-bottom: 12px; padding: 10px 8px; font-weight: 500; line-height: 1.5; }
+
+  /* 点亮成功动画 */
+  #celebrateOverlay { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; pointer-events: none; }
+  #celebrateOverlay.show { display: flex; }
+  #celebrateOverlay .celebrate-bg { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(82,103,216,.3) 0%, transparent 70%); animation: celebrateBg .8s ease-out; }
+  #celebrateOverlay .celebrate-content { position: relative; text-align: center; animation: celebratePop .5s cubic-bezier(.34,1.56,.64,1); }
+  #celebrateOverlay .celebrate-icon { font-size: 90px; filter: drop-shadow(0 0 40px rgba(245,158,11,.7)); animation: celebrateIcon 1s ease-out; }
+  #celebrateOverlay .celebrate-text { font-size: 26px; font-weight: 900; background: linear-gradient(135deg,#f59e0b,#ef4444,#8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: 16px; animation: celebrateText .4s .15s both; letter-spacing: 2px; }
+  #celebrateOverlay .celebrate-name { font-size: 17px; color: var(--muted); margin-top: 8px; font-weight: 600; animation: celebrateText .4s .3s both; }
+  #celebrateOverlay .celebrate-halos { margin-top: 14px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; animation: celebrateText .4s .45s both; }
+  #celebrateOverlay .celebrate-halo-tag { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 800; color: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.15); }
+  #celebrateOverlay .celebrate-halo-tag.h-relief { background: linear-gradient(135deg,#22c55e,#16a34a); }
+  #celebrateOverlay .celebrate-halo-tag.h-treasure { background: linear-gradient(135deg,#3b82f6,#2563eb); }
+  #celebrateOverlay .celebrate-halo-tag.h-reuse { background: linear-gradient(135deg,#f59e0b,#d97706); }
+  #celebrateOverlay .celebrate-halo-tag.h-discovery { background: linear-gradient(135deg,#8b5cf6,#7c3aed); }
+  #celebrateOverlay .celebrate-halo-tag.h-adviser { background: linear-gradient(135deg,#ec4899,#db2777); }
+  @keyframes celebrateBg { from{opacity:0;transform:scale(.5)} to{opacity:1;transform:scale(1.5)} }
+  @keyframes celebratePop { from{transform:scale(0)} to{transform:scale(1)} }
+  @keyframes celebrateIcon { 0%{transform:scale(0) rotate(-30deg)} 60%{transform:scale(1.2) rotate(10deg)} 100%{transform:scale(1)} }
+  @keyframes celebrateText { from{opacity:0;transform:translateY(16px)} to{opacity:1} }
+
+  /* 粒子画布 */
+  #particlesCanvas { position: fixed; inset: 0; z-index: 1999; pointer-events: none; }
+
+  /* 实时动态 */
+  .feed { padding: 12px; }
+  .feed-item { background: var(--card); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; font-size: 13px; box-shadow: 0 1px 6px rgba(0,0,0,.04); animation: slideUp .35s; display: flex; gap: 10px; align-items: center; }
+  .feed-item .feed-time { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 600; }
+  .feed-item .feed-halo { font-size: 22px; flex-shrink: 0; }
+  .feed-item .feed-text { flex: 1; line-height: 1.4; }
+  .feed-item .feed-awarder { color: var(--primary); font-weight: 700; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1} }
+
+  /* 排名 */
+  .rank-section { padding: 12px; }
+  .rank-item { display: flex; align-items: center; background: var(--card); border-radius: 14px; padding: 14px 18px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .rank-item .rank-no { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; margin-right: 14px; flex-shrink: 0; }
+  .rank-item:nth-child(1) .rank-no { background: linear-gradient(135deg,#fef3c7,#fde68a); color: #b45309; font-size: 16px; }
+  .rank-item:nth-child(2) .rank-no { background: linear-gradient(135deg,#f1f5f9,#e2e8f0); color: #475569; }
+  .rank-item:nth-child(3) .rank-no { background: linear-gradient(135deg,#fed7aa,#fdba74); color: #9a3412; }
+  .rank-item:nth-child(n+4) .rank-no { background: var(--primary-light); color: var(--primary); }
+  .rank-info { flex: 1; }
+  .rank-name { font-weight: 800; font-size: 15px; }
+  .rank-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .rank-score-area { text-align: right; }
+  .rank-score-num { font-size: 26px; font-weight: 900; color: var(--primary); line-height: 1; }
+  .rank-score-label { font-size: 11px; color: var(--muted); font-weight: 600; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  .empty-tip { color: var(--muted); text-align: center; padding: 40px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- 输入名字遮罩 -->
+<div id="nameOverlay">
+  <div class="box">
+    <h2>✨ 天使光环</h2>
+    <p>请输入你的名字，加入点亮</p>
+    <input id="nameInput" placeholder="你的名字" maxlength="10" autocomplete="off">
+    <button onclick="join()">✨ 加入点亮</button>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div id="mainApp" style="display:none;">
+  <div class="header">
+    <h1>✨ 天使光环点亮</h1>
+    <div class="online">🟢 <span id="onlineCount">1</span> 人在线</div>
+    <div class="tabs">
+      <button class="active" onclick="switchTab('award')">点亮光环</button>
+      <button onclick="switchTab('feed')">实时动态</button>
+      <button onclick="switchTab('rank')">🏆 排名</button>
+    </div>
+  </div>
+
+  <!-- 发言进度 -->
+  <div class="speaker-bar" id="speakerBar"></div>
+
+  <!-- 点亮光环 Tab -->
+  <div class="tab-content active" id="tab-award">
+    <div class="hint" id="hint">👆 请先选择伙伴</div>
+    <div class="grid" id="personGrid"></div>
+    <div class="halo-section" id="haloSection" style="display:none;">
+      <h3>💫 选择光环（可多选）</h3>
+      <div class="halo-grid" id="haloGrid"></div>
+    </div>
+    <div class="give-section" id="giveSection" style="display:none;">
+      <button class="give-btn" id="giveBtn" onclick="giveHalo()">✨ 点亮光环 ✨</button>
+    </div>
+  </div>
+
+  <!-- 实时动态 Tab -->
+  <div class="tab-content" id="tab-feed">
+    <div class="feed" id="feedList"><p class="empty-tip">等待光环点亮中...✨</p></div>
+  </div>
+
+  <!-- 排名 Tab -->
+  <div class="tab-content" id="tab-rank">
+    <div class="rank-section" id="rankList"><p class="empty-tip">暂无数据 📊</p></div>
+  </div>
+</div>
+
+<!-- 点亮成功动画 -->
+<div id="celebrateOverlay">
+  <div class="celebrate-bg"></div>
+  <canvas id="particlesCanvas"></canvas>
+  <div class="celebrate-content">
+    <div class="celebrate-icon" id="celebIcon">✨</div>
+    <div class="celebrate-text" id="celebText">光环点亮成功!</div>
+    <div class="celebrate-name" id="celebName"></div>
+    <div class="celebrate-halos" id="celebHalos"></div>
+  </div>
+</div>
+
+<script>
+// ══════════ 全局变量 ══════════
+var socket = null;
+var myName = '';
+var selectedPerson = null;
+var selectedHalos = [];
+var state = { scores: {}, log: [], speakerIdx: 0, roundHaloCount: {} };
+
+// ══════════ 配置数据 ══════════
+var SPEAKERS = [
+  { seq: 1, king: 'Amy', angel: 'Luna', type: 'relief', typeLabel: '减负成果' },
+  { seq: 2, king: 'Amy', angel: '谢总', type: 'treasure', typeLabel: '寻宝成果' },
+  { seq: 3, king: '王芬', angel: 'Tyra', type: 'reuse', typeLabel: '复用成果' },
+  { seq: 4, king: 'Ann', angel: 'Tyra', type: 'discovery', typeLabel: '宝藏成果' },
+  { seq: 5, king: 'Luna', angel: 'Ann', type: 'relief', typeLabel: '减负成果' },
+  { seq: 6, king: 'Rena', angel: 'Alice', type: 'relief', typeLabel: '减负成果' },
+  { seq: 7, king: 'Rena', angel: 'Bella', type: 'treasure', typeLabel: '寻宝成果' },
+  { seq: 8, king: 'Bella', angel: 'Tyra', type: 'relief', typeLabel: '减负成果' },
+  { seq: 9, king: '业务部', angel: 'Amy', type: 'relief', typeLabel: '减负成果' },
+  { seq: 10, king: 'Alice', angel: 'Vian', type: 'relief', typeLabel: '减负成果' },
+];
+
+var HALO_INFO = {
+  relief:    { icon: '🌿', label: '减负光环', desc: '为伙伴减负，提升效率', allowedRoles: ['天使'], cssClass: 'h-relief' },
+  treasure:  { icon: '🔍', label: '寻宝光环', desc: '发现伙伴亮点，挖掘价值', allowedRoles: ['天使'], cssClass: 'h-treasure' },
+  reuse:     { icon: '♻️', label: '复用光环', desc: '经验复用，成果共享', allowedRoles: ['天使','国王'], cssClass: 'h-reuse' },
+  discovery: { icon: '💎', label: '宝藏光环', desc: '发现宝藏，成果丰硕', allowedRoles: ['国王'], cssClass: 'h-discovery' },
+  adviser:   { icon: '🧠', label: '智囊光环', desc: '智囊贡献，智慧加持', allowedRoles: ['智囊团'], cssClass: 'h-adviser' },
+};
+
+var ROLE_COLORS = {
+  '国王':   { color: '#e84040', bg: '#fee2e2', emoji:'👑' },
+  '天使':   { color: '#22c55e', bg: '#dcfce7', emoji:'🤝' },
+  '智囊团': { color: '#5267d8', bg: '#e8ecff', emoji:'🧠' },
+};
+
+var ADVISER_MEMBERS = ['Tyra', '谢总'];
+
+var AVATARS = {
+  'Amy':'👩‍💼','Luna':'🧚','谢总':'🎯','Tyra':'⭐','Ann':'🌸',
+  'Rena':'🦌','Bella':'💎','Alice':'🐰','王芬':'🌺','业务部':'🏢',
+  'Vian':'🌙','华哥':'🦁','Tracy':'🌻'
+};
+
+var ORDERED_PEOPLE = [
+  { name: 'Amy', defRole: '国王' },
+  { name: 'Luna', defRole: '天使' },
+  { name: '谢总', defRole: '天使' },
+  { name: 'Tyra', defRole: '智囊团' },
+  { name: 'Ann', defRole: '国王' },
+  { name: 'Rena', defRole: '国王' },
+  { name: 'Bella', defRole: '天使' },
+  { name: 'Alice', defRole: '天使' },
+  { name: '王芬', defRole: '国王' },
+  { name: '业务部', defRole: '国王' },
+  { name: 'Vian', defRole: '天使' },
+  { name: '华哥', defRole: '天使' },
+  { name: 'Tracy', defRole: '国王' },
+];
+
+// ══════════ 加入 ══════════
+function join() {
+  var input = document.getElementById('nameInput');
+  var name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  myName = name;
+  document.getElementById('nameOverlay').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  // 立即渲染界面（不依赖socket）
+  doRenderAll();
+  // 连接socket
+  initSocket();
+}
+
+document.getElementById('nameInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') join();
+});
+
+// ══════════ Socket ══════════
+function initSocket() {
+  try {
+    socket = io({ reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 2000 });
+
+    socket.on('connect', function() {
+      console.log('✅ 已连接');
+      socket.emit('join', myName);
+    });
+
+    socket.on('state_update', function(newState) {
+      console.log('📦 收到状态更新', newState);
+      if (newState) state = newState;
+      doRenderAll();
+    });
+
+    socket.on('speaker_changed', function(data) {
+      console.log('🔄 发言人切换', data);
+      if (data && data.speakerIdx !== undefined) state.speakerIdx = data.speakerIdx;
+      renderSpeakerBar(data ? data.speaker : null);
+      clearSelection();
+    });
+
+    socket.on('halo_awarded', function(data) {
+      console.log('✨ 光环点亮', data);
+      // 更新本地状态
+      if (data && data.name && data.haloType) {
+        if (!state.scores[data.name]) state.scores[data.name] = {};
+        if (!state.scores[data.name][data.haloType]) state.scores[data.name][data.haloType] = 0;
+        state.scores[data.name][data.haloType]++;
+      }
+      showToast((data ? data.awarder : '') + ' → ' + (data ? data.name : '') + ' ' + (data && data.haloInfo ? data.haloInfo.icon : ''));
+      // 渲染动态和排名
+      renderFeed();
+      renderRank();
+      // 播放动画（不是自己点的）
+      if (data && data.awarder !== myName) {
+        playCelebrateAnimation(data);
+      }
+    });
+
+    socket.on('online_count', function(count) {
+      document.getElementById('onlineCount').textContent = count || 0;
+    });
+
+    socket.on('disconnect', function() {
+      console.log('❌ 断开连接');
+    });
+
+  } catch(e) {
+    console.error('Socket初始化失败:', e);
+  }
+}
+
+// ══════════ 统一渲染入口 ══════════
+function doRenderAll() {
+  try {
+    renderSpeakerBar(null);
+    renderPersonGrid();
+    renderRank();
+    renderFeed();
+    updateHint();
+  } catch(e) {
+    console.error('渲染失败:', e);
+  }
+}
+
+// ══════════ 角色判断工具函数 ══════════
+function getCurrentRole(name) {
+  var sp = SPEAKERS[state.speakerIdx];
+  if (!sp) return '';
+  if (sp.king === name) return '国王';
+  if (sp.angel === name) return '天使';
+  return '';
+}
+
+function isPersonSelectable(name) {
+  var sp = SPEAKERS[state.speakerIdx];
+  if (!sp) return false;
+  if (name === sp.king || name === sp.angel) return true;
+  if (ADVISER_MEMBERS.indexOf(name) !== -1) return true;
+  return false;
+}
+
+function getMaxHaloThisRound(name) {
+  var sp = SPEAKERS[state.speakerIdx];
+  if (sp && (name === sp.king || name === sp.angel)) return 2;
+  if (ADVISER_MEMBERS.indexOf(name) !== -1) return 1;
+  return 0;
+}
+
+function getRemainingHaloThisRound(name) {
+  var max = getMaxHaloThisRound(name);
+  var used = (state.roundHaloCount && state.roundHaloCount[name]) || 0;
+  return Math.max(0, max - used);
+}
+
+function isHaloAllowed(personName, haloType) {
+  var allowed = HALO_INFO[haloType].allowedRoles;
+  var role = getCurrentRole(personName);
+  if (allowed.indexOf(role) !== -1) return true;
+  if (ADVISER_MEMBERS.indexOf(personName) !== -1 && haloType === 'adviser') return true;
+  return false;
+}
+
+function getTotalScore(name) {
+  var score = (state.scores && state.scores[name]) || {};
+  return Object.keys(score).reduce(function(sum, k) { return sum + (score[k] || 0); }, 0);
+}
+
+// ══════════ 发言进度 ══════════
+function renderSpeakerBar(sp) {
+  sp = sp || SPEAKERS[state.speakerIdx] || null;
+  if (!sp) return;
+  var bar = document.getElementById('speakerBar');
+  if (!bar) return;
+
+  var dotsHtml = '<div class="progress-dots">';
+  for (var i = 0; i < SPEAKERS.length; i++) {
+    var cls = '';
+    if (i === state.speakerIdx) cls = ' active';
+    else if (i < state.speakerIdx) cls = ' done';
+    dotsHtml += '<div class="progress-dot' + cls + '"></div>';
+  }
+  dotsHtml += '</div>';
+
+  bar.innerHTML =
+    '<div class="seq"># ' + sp.seq + ' / ' + SPEAKERS.length + ' · ' + sp.typeLabel + '</div>' +
+    '<div class="roles">' +
+      ROLE_COLORS['国王'].emoji + ' <span class="king">' + sp.king + '</span>' +
+      '　×　' +
+      ROLE_COLORS['天使'].emoji + ' <span class="angel">' + sp.angel + '</span>' +
+    '</div>' +
+    dotsHtml +
+    (state.speakerIdx < SPEAKERS.length - 1
+      ? '<button class="next-btn" onclick="nextSpeaker()">➡ 下一个发言 →</button>'
+      : '<div style="margin-top:12px;font-size:14px;font-weight:700;text-align:center;color:#f59e0b;">🎉 全部发言结束！</div>');
+}
+
+function nextSpeaker() {
+  fetch('/api/next-speaker', { method: 'POST' })
+    .then(function() { clearSelection(); })
+    .catch(function() {});
+}
+
+// ══════════ 人员网格 ══════════
+function renderPersonGrid() {
+  var grid = document.getElementById('personGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  var sp = SPEAKERS[state.speakerIdx];
+  if (!sp) return;
+
+  for (var i = 0; i < ORDERED_PEOPLE.length; i++) {
+    var person = ORDERED_PEOPLE[i];
+    var total = getTotalScore(person.name);
+    var isSpeaking = (person.name === sp.king || person.name === sp.angel);
+    var contextualRole = getCurrentRole(person.name) || (ADVISER_MEMBERS.indexOf(person.name) !== -1 ? '智囊团' : person.defRole);
+    var rc = ROLE_COLORS[contextualRole] || {};
+    var selectable = isPersonSelectable(person.name);
+
+    var btn = document.createElement('button');
+    btn.className = 'person-btn' + (isSpeaking ? ' speaking' : '') + (!selectable ? ' disabled' : '');
+    btn.innerHTML =
+      '<div class="person-avatar">' + (AVATARS[person.name] || '👤') + '</div>' +
+      '<span class="role-tag" style="color:' + (rc.color || '#666') + ';background:' + (rc.bg || '#f1f5f9') + ';">' +
+        (rc.emoji || '') + ' ' + contextualRole +
+      '</span>' +
+      '<br>' + person.name +
+      (total > 0 ? '<span class="count-badge">' + total + '</span>' : '');
+
+    if (selectable) {
+      (function(p, b) {
+        b.onclick = function() { selectPerson(p.name, contextualRole, b); };
+      })(person, btn);
+    }
+    grid.appendChild(btn);
+  }
+}
+
+// ══════════ 选择人员 ══════════
+function selectPerson(name, displayRole, el) {
+  var allBtns = document.querySelectorAll('.person-btn');
+  for (var i = 0; i < allBtns.length; i++) allBtns[i].classList.remove('selected');
+
+  selectedPerson = { name: name, displayRole: displayRole };
+  selectedHalos = [];
+  el.classList.add('selected');
+
+  document.getElementById('haloSection').style.display = '';
+  renderHaloButtons(name, displayRole);
+  document.getElementById('giveSection').style.display = '';
+  updateHint();
+}
+
+// ══════════ 光环按钮 ══════════
+function renderHaloButtons(name, displayRole) {
+  var grid = document.getElementById('haloGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  var remaining = getRemainingHaloThisRound(name);
+
+  var haloTypes = Object.keys(HALO_INFO);
+  for (var i = 0; i < haloTypes.length; i++) {
+    var ht = haloTypes[i];
+    var hi = HALO_INFO[ht];
+    var allowed = isHaloAllowed(name, ht);
+    var reached = remaining <= 0;
+
+    var btn = document.createElement('button');
+    btn.className = 'halo-btn' + (!allowed || reached ? ' disabled' : '');
+    btn.innerHTML =
+      '<span class="halo-icon">' + hi.icon + '</span>' +
+      '<div class="halo-label">' + hi.label + '</div>' +
+      '<div class="halo-desc">' + hi.desc + '</div>';
+
+    if (allowed && !reached) {
+      (function(ht2, b) {
+        b.onclick = function() { toggleHalo(ht2, b); };
+      })(ht, btn);
+    }
+    grid.appendChild(btn);
+  }
+}
+
+function toggleHalo(haloType, el) {
+  var idx = selectedHalos.indexOf(haloType);
+  if (idx !== -1) {
+    selectedHalos.splice(idx, 1);
+    el.classList.remove('selected');
+  } else {
+    var max = getMaxHaloThisRound(selectedPerson.name);
+    if (selectedHalos.length >= max) {
+      showToast('⚠️ 本轮最多点亮 ' + max + ' 个光环');
+      return;
+    }
+    selectedHalos.push(haloType);
+    el.classList.add('selected');
+  }
+  updateHint();
+}
+
+// ══════════ 点亮 ══════════
+function giveHalo() {
+  if (!selectedPerson || selectedHalos.length === 0) return;
+  var name = selectedPerson.name;
+  var displayRole = selectedPerson.displayRole;
+  var halosToSend = selectedHalos.slice();
+
+  // 播放自己的动画
+  playSelfCelebrate(name, displayRole, halosToSend);
+
+  // 发送
+  for (var i = 0; i < halosToSend.length; i++) {
+    if (socket) socket.emit('award_halo', { name: name, haloType: halosToSend[i], displayRole: displayRole });
+  }
+
+  // 手动更新本地状态（不等服务器广播）
+  for (var j = 0; j < halosToSend.length; j++) {
+    if (!state.scores[name]) state.scores[name] = {};
+    if (!state.scores[name][halosToSend[j]]) state.scores[name][halosToSend[j]] = 0;
+    state.scores[name][halosToSend[j]]++;
+  }
+
+  // 立即刷新排名和动态
+  renderRank();
+  renderFeed();
+
+  clearSelection();
+}
+
+function clearSelection() {
+  selectedPerson = null;
+  selectedHalos = [];
+  var allBtns = document.querySelectorAll('.person-btn');
+  for (var i = 0; i < allBtns.length; i++) allBtns[i].classList.remove('selected');
+  document.getElementById('haloSection').style.display = 'none';
+  document.getElementById('giveSection').style.display = 'none';
+  updateHint();
+}
+
+// ══════════ Tab 切换 ══════════
+function switchTab(tab) {
+  console.log('🔀 切换Tab:', tab);
+
+  // 隐藏所有tab内容
+  var allContents = document.querySelectorAll('.tab-content');
+  for (var i = 0; i < allContents.length; i++) allContents[i].classList.remove('active');
+
+  // 取消所有tab按钮高亮
+  var allBtns = document.querySelectorAll('.tabs button');
+  for (var j = 0; j < allBtns.length; j++) allBtns[j].classList.remove('active');
+
+  // 显示目标tab
+  var target = document.getElementById('tab-' + tab);
+  if (target) target.classList.add('active');
+
+  // 高亮对应的按钮（通过文字匹配，不依赖event）
+  var btnTexts = { 'award': '点亮光环', 'feed': '实时动态', 'rank': '🏆 排名' };
+  var tabs = document.querySelectorAll('.tabs button');
+  for (var k = 0; k < tabs.length; k++) {
+    if (tabs[k].textContent.indexOf(btnTexts[tab]) !== -1 || tabs[k].textContent === btnTexts[tab]) {
+      tabs[k].classList.add('active');
+      break;
+    }
+  }
+
+  // 渲染对应内容
+  if (tab === 'feed') renderFeed();
+  if (tab === 'rank') renderRank();
+}
+
+// ══════════ 实时动态 ══════════
+function renderFeed() {
+  var list = document.getElementById('feedList');
+  if (!list) { console.warn('feedList not found'); return; }
+  if (!state.log || state.log.length === 0) {
+    list.innerHTML = '<p class="empty-tip">等待光环点亮中...✨</p>';
+    return;
+  }
+  console.log('📝 渲染动态，共', state.log.length, '条');
+  list.innerHTML = '';
+  var show = state.log.slice(0, 50);
+  for (var i = 0; i < show.length; i++) {
+    var item = show[i];
+    var div = document.createElement('div');
+    div.className = 'feed-item';
+    var haloIcon = (item.halo && HALO_INFO[item.halo]) ? HALO_INFO[item.halo].icon : '✨';
+    div.innerHTML =
+      '<span class="feed-time">' + (item.time || '') + '</span>' +
+      '<span class="feed-halo">' + haloIcon + '</span>' +
+      '<span class="feed-text">' + (item.text || '') + '</span>';
+    list.appendChild(div);
+  }
+}
+
+// ══════════ 排名 ══════════
+function renderRank() {
+  var list = document.getElementById('rankList');
+  if (!list) { console.warn('rankList not found'); return; }
+
+  var data = [];
+  var names = state.scores ? Object.keys(state.scores) : [];
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i];
+    var score = state.scores[name];
+    var total = 0;
+    var keys = Object.keys(score);
+    for (var j = 0; j < keys.length; j++) total += (score[keys[j]] || 0);
+    if (total > 0) data.push({ name: name, total: total, score: score });
+  }
+  data.sort(function(a, b) { return b.total - a.total; });
+
+  if (data.length === 0) {
+    list.innerHTML = '<p class="empty-tip">暂无数据 📊</p>';
+    return;
+  }
+
+  console.log('🏆 渲染排名，共', data.length, '人');
+  list.innerHTML = '';
+  for (var k = 0; k < data.length; k++) {
+    var d = data[k];
+    var div = document.createElement('div');
+    div.className = 'rank-item';
+
+    var detailParts = [];
+    var haloTypes = Object.keys(HALO_INFO);
+    for (var m = 0; m < haloTypes.length; m++) {
+      if (d.score[haloTypes[m]]) {
+        detailParts.push(HALO_INFO[haloTypes[m]].icon + '×' + d.score[haloTypes[m]]);
+      }
+    }
+
+    div.innerHTML =
+      '<div class="rank-no">' + (k + 1) + '</div>' +
+      '<div class="rank-info"><div class="rank-name">' + d.name + '</div><div class="rank-detail">' + (detailParts.join('  ') || '—') + '</div></div>' +
+      '<div class="rank-score-area"><div class="rank-score-num">' + d.total + '</div><div class="rank-score-label">光环</div></div>';
+    list.appendChild(div);
+  }
+}
+
+// ══════════ 提示 ══════════
+function updateHint() {
+  var hint = document.getElementById('hint');
+  if (!hint) return;
+  if (selectedPerson && selectedHalos.length > 0) {
+    var haloTexts = [];
+    for (var i = 0; i < selectedHalos.length; i++) {
+      haloTexts.push(HALO_INFO[selectedHalos[i]].icon + ' ' + HALO_INFO[selectedHalos[i]].label);
+    }
+    hint.innerHTML = '将给 <b>' + selectedPerson.name + '</b>（' + selectedPerson.displayRole + '）点亮：<br><span style="color:var(--primary);font-weight:800;">' + haloTexts.join('、') + '</span>';
+  } else if (selectedPerson) {
+    hint.innerHTML = '已选择 <b>' + selectedPerson.name + '</b>（' + selectedPerson.displayRole + '），请选择光环';
+  } else {
+    hint.innerHTML = '👆 请选择本轮的<span style="color:var(--primary)">国王</span>、<span style="color:#22c55e">天使</span>或<span style="color:#5267d8">智囊团</span>';
+  }
+}
+
+// ══════════ 庆祝动画 ══════════
+function playSelfCelebrate(name, role, halos) {
+  var overlay = document.getElementById('celebrateOverlay');
+  var iconEl = document.getElementById('celebIcon');
+  var textEl = document.getElementById('celebText');
+  var nameEl = document.getElementById('celebName');
+  var halosEl = document.getElementById('celebHalos');
+
+  var firstHalo = HALO_INFO[halos[0]];
+  iconEl.textContent = firstHalo ? firstHalo.icon : '✨';
+  textEl.textContent = '✨ 光环已点亮!';
+  nameEl.textContent = '送给 ' + name + '（' + role + '）';
+
+  halosEl.innerHTML = '';
+  for (var i = 0; i < halos.length; i++) {
+    var info = HALO_INFO[halos[i]];
+    if (info) {
+      var tag = document.createElement('span');
+      tag.className = 'celebrate-halo-tag ' + (info.cssClass || '');
+      tag.textContent = info.icon + ' ' + info.label;
+      halosEl.appendChild(tag);
+    }
+  }
+
+  overlay.classList.add('show');
+  startParticles();
+  setTimeout(function() {
+    overlay.classList.remove('show');
+    stopParticles();
+  }, 2200);
+}
+
+function playCelebrateAnimation(data) {
+  if (!data) return;
+  var overlay = document.getElementById('celebrateOverlay');
+  var iconEl = document.getElementById('celebIcon');
+  var textEl = document.getElementById('celebText');
+  var nameEl = document.getElementById('celebName');
+  var halosEl = document.getElementById('celebHalos');
+
+  var haloInfo = data.haloInfo || (data.haloType ? HALO_INFO[data.haloType] : null) || {};
+  iconEl.textContent = haloInfo.icon || '✨';
+  textEl.textContent = (data.awarder || '有人') + ' 点亮了光环!';
+  nameEl.textContent = '→ ' + (data.name || '');
+
+  halosEl.innerHTML = '';
+  if (data.haloType && HALO_INFO[data.haloType]) {
+    var hi = HALO_INFO[data.haloType];
+    var tag = document.createElement('span');
+    tag.className = 'celebrate-halo-tag ' + (hi.cssClass || '');
+    tag.textContent = hi.icon + ' ' + hi.label;
+    halosEl.appendChild(tag);
+  }
+
+  overlay.classList.add('show');
+  startParticles();
+  setTimeout(function() {
+    overlay.classList.remove('show');
+    stopParticles();
+  }, 1800);
+}
+
+// ══════════ 粒子 ══════════
+var particleAnimId = null;
+var particles = [];
+
+function startParticles() {
+  var canvas = document.getElementById('particlesCanvas');
+  if (!canvas) return;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  var ctx = canvas.getContext('2d');
+  particles = [];
+
+  var colors = ['#f59e0b','#fbbf24','#8b5cf6','#5267d8','#22c55e','#ef4444','#ec4899'];
+  var shapes = ['★','✦','●','◆','✿','❋','♦','◉'];
+
+  for (var i = 0; i < 50; i++) {
+    particles.push({
+      x: canvas.width / 2,
+      y: canvas.height * 0.65,
+      vx: (Math.random() - 0.5) * 14,
+      vy: Math.random() * (-12) - 4,
+      size: Math.random() * 8 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      shape: shapes[Math.floor(Math.random() * shapes.length)],
+      life: 1,
+      decay: Math.random() * 0.02 + 0.008,
+      rotation: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 12,
+      gravity: 0.25
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var alive = false;
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      if (p.life <= 0) continue;
+      alive = true;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += p.gravity;
+      p.vx *= 0.98;
+      p.life -= p.decay;
+      p.rotation += p.rotSpeed;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation * Math.PI / 180);
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.font = p.size + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 10;
+      ctx.fillText(p.shape, 0, 0);
+      ctx.restore();
+    }
+    if (alive) {
+      particleAnimId = requestAnimationFrame(animate);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+  animate();
+}
+
+function stopParticles() {
+  if (particleAnimId) { cancelAnimationFrame(particleAnimId); particleAnimId = null; }
+  var canvas = document.getElementById('particlesCanvas');
+  if (canvas) { var ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
+  particles = [];
+}
+
+// ══════════ Toast ══════════
+function showToast(msg) {
+  var t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(35,39,47,.92);color:#fff;padding:11px 24px;border-radius:999px;font-size:13px;font-weight:600;z-index:3000;animation:fadeIn .3s;box-shadow:0 4px 16px rgba(0,0,0,.2);letter-spacing:.5px;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() {
+    t.style.opacity = '0';
+    t.style.transition = 'opacity .3s';
+    setTimeout(function() { t.remove(); }, 300);
+  }, 2500);
+}
+</script>
+</body>
+</html>

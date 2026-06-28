@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>天使光环 - 扫码加入</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: white;
+      padding: 20px;
+    }
+    .container {
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 32px;
+    }
+    .qr-wrapper {
+      background: #fff;
+      border-radius: 20px;
+      padding: 20px;
+      display: inline-block;
+      margin-bottom: 24px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+    }
+    #qrcode-img {
+      width: 240px !important;
+      height: 240px !important;
+      display: block;
+      border-radius: 8px;
+    }
+    .url {
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      word-break: break-all;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+    .url a {
+      color: #7dd3fc;
+      text-decoration: none;
+    }
+    .steps {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      text-align: left;
+    }
+    .steps h3 {
+      font-size: 15px;
+      margin-bottom: 12px;
+      color: #FFD700;
+    }
+    .steps ol {
+      padding-left: 20px;
+      font-size: 13px;
+      line-height: 2;
+      color: rgba(255,255,255,0.8);
+    }
+    .note {
+      margin-top: 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.6;
+    }
+    /* 加载动画 */
+    .loading-dot {
+      width: 40px; height: 40px;
+      background: #FFD700;
+      border-radius: 50%;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(0.85); opacity: 0.6; }
+      50% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">✨ 天使光环点亮工具</div>
+    <div class="subtitle">扫码加入，一起点亮光环</div>
+
+    <div class="qr-wrapper" id="qr-container">
+      <img id="qrcode-img" alt="扫码加入天使光环点亮工具" onload="this.style.display='block'" onerror="showError()" />
+    </div>
+
+    <div class="url">
+      或复制地址到浏览器：<br>
+      <a href="https://funny-rings-wonder.loca.lt" target="_blank">https://funny-rings-wonder.loca.lt</a>
+    </div>
+
+    <div class="steps">
+      <h3>📱 使用步骤</h3>
+      <ol>
+        <li>用手机扫描二维码</li>
+        <li>点击 <b>"Click to Continue"</b>（第一次访问）</li>
+        <li>输入你的名字，点击加入</li>
+        <li>选择伙伴 → 选择光环 → 点亮！</li>
+      </ol>
+    </div>
+
+    <div class="note">
+      ⚠️ 首次打开会看到验证页，点击继续即可<br>
+      🔗 链接在早会期间有效，请放心使用
+    </div>
+  </div>
+
+  <script>
+    // 使用 Google Chart API 生成二维码图片（无需任何依赖库）
+    const url = 'https://funny-rings-wonder.loca.lt';
+    const encoded = encodeURIComponent(url);
+    // 使用 qr-server.com 的 API 生成二维码图片
+    document.getElementById('qrcode-img').src = 
+      'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encoded +
+      '&bgcolor=ffffff&color=1a1a2e&margin=4';
+
+    function showError() {
+      // 如果第一个源失败，尝试备用方案
+      document.getElementById('qrcode-img').src =
+        'https://chart.googleapis.com/chart?cht=qr&chs=280x280&chl=' + encoded +
+        '&choe=UTF-8&chld=L|4';
+    }
+  </script>
+</body>
+</html>
