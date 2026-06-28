@@ -137,6 +137,17 @@
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
   .empty-tip { color: var(--muted); text-align: center; padding: 40px 0; font-size: 14px; }
+
+  /* 重置弹窗 */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999; display: none; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #1e293b; border-radius: 18px; padding: 28px 24px 22px; max-width: 310px; width: 88%; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .modal-title { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 10px; }
+  .modal-desc { font-size: 13px; color: rgba(255,255,255,.55); line-height: 1.75; margin-bottom: 22px; }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btn { flex: 1; padding: 11px 0; border-radius: 10px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .modal-btn.cancel { background: rgba(255,255,255,.1); color: rgba(255,255,255,.7); }
+  .modal-btn.confirm { background: linear-gradient(135deg,#ef4444,#dc2626); color: #fff; box-shadow: 0 4px 14px rgba(239,68,68,.35); }
 </style>
 </head>
 <body>
@@ -822,6 +833,52 @@ function stopParticles() {
   particles = [];
 }
 
+// ════════ 重置功能 ════════
+(function() {
+  var pressTimer = null;
+  var headerH1 = document.querySelector('.header h1');
+  if (headerH1) {
+    headerH1.style.cursor = 'pointer';
+    headerH1.title = '长按2秒可重置数据';
+    headerH1.addEventListener('touchstart', function() { pressTimer = setTimeout(doShowReset, 2000); });
+    headerH1.addEventListener('touchend', function() { clearTimeout(pressTimer); });
+    headerH1.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
+    headerH1.addEventListener('mousedown', function() { pressTimer = setTimeout(doShowReset, 2000); });
+    headerH1.addEventListener('mouseup', function() { clearTimeout(pressTimer); });
+    headerH1.addEventListener('mouseleave', function() { clearTimeout(pressTimer); });
+  }
+})();
+
+function doShowReset() {
+  var m = document.getElementById('resetModal');
+  if (m) m.classList.add('show');
+}
+function closeResetModal() {
+  var m = document.getElementById('resetModal');
+  if (m) m.classList.remove('show');
+}
+function confirmReset() {
+  closeResetModal();
+  fetch('/api/reset', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      showToast('✅ 已重置所有数据！');
+      // 重置本地状态
+      state = { scores: {}, log: [], speakerIdx: 0, roundHaloCount: {} };
+      doRenderAll();
+    })
+    .catch(function() { showToast('❌ 重置失败，请重试'); });
+}
+
+// 点击遮罩层关闭弹窗
+document.addEventListener('DOMContentLoaded', function() {
+  var overlay = document.getElementById('resetModal');
+  if (overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeResetModal();
+    });
+  }
+});
 // ══════════ Toast ══════════
 function showToast(msg) {
   var t = document.createElement('div');
