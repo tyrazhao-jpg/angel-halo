@@ -150,6 +150,20 @@ io.on('connection', (socket) => {
   });
 });
 
+app.post('/api/reset', express.json(), (req, res) => {
+  state = {
+    scores: {},
+    log: [],
+    speakerIdx: 0,
+    roundHaloCount: {},
+  };
+  saveData();
+  io.emit('state_update', state);
+  io.emit('halo_reset');
+  console.log('🔄 状态已重置');
+  res.json({ ok: true });
+});
+
 // ═══════════ 启动 ═══════════
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {

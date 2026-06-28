@@ -303,7 +303,15 @@ function initSocket() {
       clearSelection();
     });
 
-    socket.on('halo_awarded', function(data) {
+  
+  socket.on('halo_reset', function() {
+    loadState();
+    renderPersonGrid();
+    renderLog();
+    renderRank();
+    updateSpeaker();
+  });
+  socket.on('halo_awarded', function(data) {
       console.log('✨ 光环点亮', data);
       // 更新本地状态
       if (data && data.name && data.haloType) {
@@ -827,5 +835,19 @@ function showToast(msg) {
   }, 2500);
 }
 </script>
+
+  <!-- 重置确认弹窗 -->
+  <div class="modal-overlay" id="resetModal">
+    <div class="modal-box">
+      <div class="modal-title">🔄 重置所有数据</div>
+      <div class="modal-desc">确定要清空所有点亮记录和排名吗？<br>此操作不可撤销！</div>
+      <div class="modal-btns">
+        <button class="modal-btn cancel" onclick="closeResetModal()">取消</button>
+        <button class="modal-btn confirm" onclick="confirmReset()">确定重置</button>
+      </div>
+    </div>
+  </div>
+  <div id="resetToast" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.85);color:#fff;padding:14px 28px;border-radius:12px;font-size:15px;z-index:9999;pointer-events:none;">✅ 已重置</div>
 </body>
+
 </html>
